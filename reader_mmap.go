@@ -4,9 +4,27 @@
 package maxminddb
 
 import (
+	"embed"
 	"os"
 	"runtime"
 )
+
+func OpenWithEmbedFS(f embed.FS, path string) (*Reader, error) {
+	data, err := f.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+
+	reader, err := FromBytes(data)
+	if err != nil {
+		_ = munmap(data)
+		return nil, err
+	}
+
+	reader.hasMappedFile = true
+	runtime.SetFinalizer(reader, (*Reader).Close)
+	return reader, nil
+}
 
 // Open takes a string path to a MaxMind DB file and returns a Reader
 // structure or an error. The database file is opened using a memory map
@@ -33,7 +51,7 @@ func Open(file string) (*Reader, error) {
 		return nil, err
 	}
 
-	if err := mapFile.Close(); err != nil {
+	if err = mapFile.Close(); err != nil {
 		//nolint:errcheck // we prefer to return the original error
 		munmap(mmap)
 		return nil, err
